@@ -194,7 +194,7 @@ class DdpgAgent:
         actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr_actor)
         critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=lr_critic)
         loss_fn = torch.nn.MSELoss()
-        writer_loss_count, best_nb_step, best_reward = 0, 0, 0
+        writer_loss_count, best_nb_step, best_reward = 0, 0, -np.inf
         t = trange(1, nb_episodes+1)
         for episode in t:
             s = torch.from_numpy(self.env.reset())
