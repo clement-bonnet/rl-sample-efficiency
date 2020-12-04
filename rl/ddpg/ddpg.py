@@ -128,6 +128,29 @@ class DdpgAgent:
             buffer_size=1_000_000, buffer_start=200, gamma=0.95):
         """
         DDPG agent.
+        Arguments:
+            - env_name: str
+                Environment name from Gym.
+            - actor: Actor
+                Actor network from the Actor class.
+            - critic: Critic
+                Critic network from the Critic class.
+            - target_actor: Actor
+                Target actor network from the Actor class.
+            - target_critic: Critic
+                Target critic network from the Critic class.
+            - h1: int
+                Number of neurons in the first hidden layer of both networks.
+            - h2: int
+                Number of neurons in the second hidden layer of both networks.
+            - device: str ("cpu" or "cuda")
+                Device to store and later train the models on.
+            - buffer_size: int
+                Size of the buffer used during training.
+            - buffer_start: int
+                Number of samples after which training using the buffer is enabled.
+            - gamma: float
+                Discount factor for the environment.
         """
         
         self.env_name = env_name
@@ -171,11 +194,37 @@ class DdpgAgent:
         self.gamma = gamma
 
 
-    def train(self, nb_episodes, max_steps, batch_size, summary_writer_path=None,
+    def train(self, nb_episodes, max_steps, batch_size=32, summary_writer_path=None,
             set_device=None, lr_actor=0.0001, lr_critic=0.0001, tau=0.001,
-            sigma_noise=None):
+            sigma_noise=None, save_after_episodes=None, save_path=None, episode_start=0):
         """
         Train the DDPG agent.
+        Arguments:
+            - nb_episodes: int
+                Number of episodes to train the agent on.
+            - max_steps: int
+                Maximum number of steps per episode.
+            - batch_size: int
+                Batch size of experience sampled from buffer and trained on
+                at each step in the environment.
+            - summary_writer_path: str
+                Path to write a tensorboard summary for monitoring.
+            - set_device: str ("cpu" or "cuda")
+                Device to use for training. Default to device mentioned in __init__.
+            - lr_actor: float
+                Learning rate used in the actor network.
+            - lr_critic: float
+                Learning rate used in the critic network.
+            - tau: float
+                Hyperparameter that determines the rate at which the networks' parameters
+                move towards the targets ones.
+            - sigma_noise: float
+                Set the noise added in the actions.
+            - save_after_episodes: list[int]
+                List of episodes after which to save current models.
+            - episode_start: int
+                In case of a warm start, episode_start is the number of episodes
+                the agent has already been trained on.
         """
         
         if set_device is not None:
@@ -195,7 +244,7 @@ class DdpgAgent:
         critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=lr_critic)
         loss_fn = torch.nn.MSELoss()
         writer_loss_count, best_nb_step, best_reward = 0, 0, -np.inf
-        t = trange(1, nb_episodes+1)
+        t = trange(episode_start + 1, episode_start + nb_episodes + 1)
         for episode in t:
             s = torch.from_numpy(self.env.reset())
             ep_reward = 0
@@ -236,7 +285,7 @@ class DdpgAgent:
                         writer.add_scalar("Loss/actor", actor_loss.item(), writer_loss_count)
                         writer.add_scalar("Loss/critic", critic_loss.item(), writer_loss_count)
 
-                    # Soft update
+                    # Soft update of the networks towards the target networks
                     for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
                         target_param.data.copy_(target_param.data*(1 - tau) + param.data*tau)
                     for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
@@ -247,6 +296,11 @@ class DdpgAgent:
                 if done:
                     self.noise.reset()
                     break
+            # The episode has just ended
+            if save_after_episodes is not None and if episode in save_after_episodes:
+                path = os.path.join(save_path, "episode_{}".format(episode))
+                comment = "Agent trained on {} episodes.".format(episode)
+                self.save(path, comment)
             if step > best_nb_step:
                 best_nb_step = step
             if ep_reward > best_reward:
