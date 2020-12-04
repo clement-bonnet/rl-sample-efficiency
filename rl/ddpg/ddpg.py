@@ -1,4 +1,5 @@
 from collections import deque
+import datetime
 import os
 import json
 import time
@@ -239,7 +240,7 @@ class DdpgAgent:
             writer = None
         
         if save_after_episodes is not None and save_path is None:
-            save_path = "models/intermediate_models_" + 
+            save_path = "models/agent_" + \
                 datetime.datetime.today().strftime("%Y_%m_%d_%H%M")
         verbose_message = ""
 
