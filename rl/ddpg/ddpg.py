@@ -14,11 +14,12 @@ from tqdm import trange
 
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, h1, h2):
+    def __init__(self, state_dim, action_dim, h1, h2, init_w=1e-1):
         super(Critic, self).__init__()
         self.linear1 = nn.Linear(state_dim, h1)
         self.linear2 = nn.Linear(h1 + action_dim, h2)
         self.linear3 = nn.Linear(h2, 1)
+        self.linear3.weight.data.uniform_(-init_w, init_w)
         self.relu = nn.ReLU()
         
     def forward(self, state, action):
@@ -30,12 +31,13 @@ class Critic(nn.Module):
         return x
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, a_bound, h1, h2):
+    def __init__(self, state_dim, action_dim, a_bound, h1, h2, init_w=1e-1):
         super(Actor, self).__init__()
         self.a_bound = a_bound
         self.linear1 = nn.Linear(state_dim, h1)
         self.linear2 = nn.Linear(h1, h2)
         self.linear3 = nn.Linear(h2, action_dim)
+        self.linear3.weight.data.uniform_(-init_w, init_w)
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
         
@@ -126,7 +128,7 @@ class DdpgAgent:
 
     def __init__(self, env_name, actor=None, critic=None, target_actor=None,
             target_critic=None, h1=400, h2=300, device=None,
-            buffer_size=1_000_000, buffer_start=200, gamma=0.95):
+            buffer_size=1_000_000, buffer_start=200, gamma=0.95, init_w=1e-3):
         """
         DDPG agent.
         Arguments:
@@ -152,6 +154,8 @@ class DdpgAgent:
                 Number of samples after which training using the buffer is enabled.
             - gamma: float
                 Discount factor for the environment.
+            - init_w: float
+                Initialization of last layer of actor and critic.
         """
         
         self.env_name = env_name
@@ -167,22 +171,26 @@ class DdpgAgent:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         if actor is None:
-            self.actor = Actor(state_dim, action_dim, self.a_bound, h1, h2).to(self.device)
+            self.actor = Actor(
+                state_dim, action_dim, self.a_bound, h1, h2, init_w=init_w).to(self.device)
         else:
             self.actor = actor.to(self.device)
 
         if critic is None:
-            self.critic = Critic(state_dim, action_dim, h1, h2).to(self.device)
+            self.critic = Critic(
+                state_dim, action_dim, h1, h2, init_w=init_w).to(self.device)
         else:
             self.critic = critic.to(self.device)
 
         if target_actor is None:
-            self.target_actor = Actor(state_dim, action_dim, self.a_bound, h1, h2).to(self.device)
+            self.target_actor = Actor(
+                state_dim, action_dim, self.a_bound, h1, h2, init_w=init_w).to(self.device)
         else:
             self.target_actor = target_actor.to(self.device)
 
         if target_critic is None:
-            self.target_critic = Critic(state_dim, action_dim, h1, h2).to(self.device)
+            self.target_critic = Critic(
+                state_dim, action_dim, h1, h2, init_w=init_w).to(self.device)
         else:
             self.target_critic = target_critic.to(self.device)
 
