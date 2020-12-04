@@ -320,7 +320,7 @@ class DdpgAgent:
             t.set_postfix(best_reward=best_reward, best_nb_step=best_nb_step)
         writer.close()
         if verbose:
-            print(comment)
+            print(verbose_message)
 
     
     def test(self, nb_episodes=5, max_steps=200, sleep_time=1):
