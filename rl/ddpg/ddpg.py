@@ -297,7 +297,7 @@ class DdpgAgent:
                     self.noise.reset()
                     break
             # The episode has just ended
-            if save_after_episodes is not None and if episode in save_after_episodes:
+            if save_after_episodes is not None and episode in save_after_episodes:
                 path = os.path.join(save_path, "episode_{}".format(episode))
                 comment = "Agent trained on {} episodes.".format(episode)
                 self.save(path, comment)
