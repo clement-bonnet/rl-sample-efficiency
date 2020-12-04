@@ -253,7 +253,7 @@ class DdpgAgent:
 
     def train(self, nb_episodes, max_steps, batch_size=32, summary_writer_path=None,
             set_device=None, lr_actor=0.0001, lr_critic=0.0001, tau=0.001,
-            sigma_noise=None, save_after_episodes=None,
+            sigma_noise=None, save_episodes=None,
             save_path=None, episode_start=0, verbose=True):
         """
         Train the DDPG agent.
@@ -278,7 +278,7 @@ class DdpgAgent:
                 move towards the targets ones.
             - sigma_noise: float
                 Set the noise added in the actions.
-            - save_after_episodes: list[int]
+            - save_episodes: list[int]
                 List of episodes after which to save current models.
             - save_path: str
                 Path where to save intermediate models.
@@ -295,7 +295,7 @@ class DdpgAgent:
         else:
             writer = None
         
-        if save_after_episodes is not None and save_path is None:
+        if save_episodes is not None and save_path is None:
             save_path = "models/agent_" + \
                 datetime.datetime.today().strftime("%Y_%m_%d_%H%M")
         verbose_message = ""
@@ -357,7 +357,7 @@ class DdpgAgent:
                     self.noise.reset()
                     break
             # The episode has just ended
-            if save_after_episodes is not None and episode in save_after_episodes:
+            if save_episodes is not None and episode in save_episodes:
                 path = os.path.join(save_path, "episode_{}".format(episode))
                 comment = "Agent trained on {} episodes.".format(episode)
                 verbose_message += self.save(path, comment, verbose=True) + "\n"
