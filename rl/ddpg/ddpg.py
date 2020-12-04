@@ -88,6 +88,54 @@ class OrnsteinUhlenbeckActionNoise:
             print("The value of sigma has not changed. Please enter a positive value.")
 
 class ReplayBuffer:
+    def __init__(self, buffer_size, state_dim, action_dim, buffer_name=""):
+        assert buffer_size > 0, "buffer_size must be > 0."
+        self.buffer_size = buffer_size
+        self.buffer_name = buffer_name
+        self.buffer_s = np.empty((buffer_size, state_dim))
+        self.buffer_a = np.empty((buffer_size, action_dim))
+        self.buffer_r = np.empty(buffer_size)
+        self.buffer_d = np.empty(buffer_size, dtype=np.bool)
+        self.buffer_s2 = np.empty((buffer_size, state_dim))
+        self.index = 0
+
+    def add(self, s, a, reward, done, s2):
+        self.index += 1
+        index = (self.index)%self.buffer_size
+        self.buffer_s[index] = s
+        self.buffer_a[index] = a
+        self.buffer_r[index] = reward
+        self.buffer_d[index] = done
+        self.buffer_s2[index] = s2
+        
+    def size(self):
+        return self.buffer_size        
+    
+    def __len__(self):
+        return min(self.index, self.buffer_size)
+    
+    def sample(self, batch_size, device):
+        indices = np.random.choice(len(self), batch_size)
+        s_b = torch.FloatTensor(self.buffer_s[indices]).to(device)
+        a_b = torch.FloatTensor(self.buffer_a[indices]).to(device)
+        reward_b = torch.FloatTensor(self.buffer_r[indices]).unsqueeze(1).to(device)
+        done_b = torch.FloatTensor(np.float32(self.buffer_d[indices])).unsqueeze(1).to(device)
+        s2_b = torch.FloatTensor(self.buffer_s2[indices]).to(device)
+        return s_b, a_b, reward_b, done_b, s2_b
+    
+    def clear(self):
+        self.buffer_s = 0
+        self.buffer_a = 0
+        self.buffer_r = 0
+        self.buffer_d = False
+        self.buffer_s2 = 0
+        self.index = 0
+    
+    def __repr__(self):
+        return "ReplayBuffer named {} with a buffer size of {}.".format(self.buffer_name, self.buffer_size)
+
+
+class ReplayBufferOld:
     def __init__(self, buffer_size, buffer_name=""):
         self.buffer_size = buffer_size
         self.buffer_name = buffer_name
@@ -196,7 +244,7 @@ class DdpgAgent:
 
         self.noise = OrnsteinUhlenbeckActionNoise(
             mu=np.zeros(action_dim), sigma=0.1*self.a_bound)
-        self.buffer = ReplayBuffer(buffer_size)
+        self.buffer = ReplayBuffer(buffer_size, state_dim, action_dim)
         self.buffer_size = buffer_size
         self.buffer_start = buffer_start
 
@@ -272,12 +320,7 @@ class DdpgAgent:
                 self.buffer.add(s, a, reward, done, s2)
                 # Experience replay
                 if len(self.buffer) > self.buffer_start:
-                    s_b, a_b, reward_b, done_b, s2_b = self.buffer.sample(batch_size)
-                    s_b = torch.FloatTensor(s_b).to(self.device)
-                    a_b = torch.FloatTensor(a_b).to(self.device)
-                    reward_b = torch.FloatTensor(reward_b).unsqueeze(1).to(self.device)
-                    done_b = torch.FloatTensor(np.float32(done_b)).unsqueeze(1).to(self.device)
-                    s2_b = torch.FloatTensor(s2_b).to(self.device)
+                    s_b, a_b, reward_b, done_b, s2_b = self.buffer.sample(batch_size, self.device)
 
                     # Compute loss for critic
                     a2_b = self.target_actor(s2_b)
