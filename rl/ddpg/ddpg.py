@@ -196,7 +196,8 @@ class DdpgAgent:
 
     def train(self, nb_episodes, max_steps, batch_size=32, summary_writer_path=None,
             set_device=None, lr_actor=0.0001, lr_critic=0.0001, tau=0.001,
-            sigma_noise=None, save_after_episodes=None, save_path=None, episode_start=0):
+            sigma_noise=None, save_after_episodes=None,
+            save_path="models/intermediate_models", episode_start=0):
         """
         Train the DDPG agent.
         Arguments:
@@ -222,6 +223,8 @@ class DdpgAgent:
                 Set the noise added in the actions.
             - save_after_episodes: list[int]
                 List of episodes after which to save current models.
+            - save_path: str
+                Path where to save intermediate models.
             - episode_start: int
                 In case of a warm start, episode_start is the number of episodes
                 the agent has already been trained on.
