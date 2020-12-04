@@ -317,7 +317,7 @@ class DdpgAgent:
             if save_after_episodes is not None and episode in save_after_episodes:
                 path = os.path.join(save_path, "episode_{}".format(episode))
                 comment = "Agent trained on {} episodes.".format(episode)
-                verbose_message += self.save(path, comment) + "\n"
+                verbose_message += self.save(path, comment, verbose=True) + "\n"
             if step > best_nb_step:
                 best_nb_step = step
             if ep_reward > best_reward:
@@ -351,7 +351,7 @@ class DdpgAgent:
         self.env.close()
 
 
-    def save(self, path, comment=None):
+    def save(self, path, comment=None, verbose=False):
         """
         Save an agent to the given path. Will be saved in the folder:
         - agent_param.json
@@ -379,7 +379,9 @@ class DdpgAgent:
             agent_param["comment"] = comment
         with open(os.path.join(path, "agent_param.json"), "w") as fp:
             json.dump(agent_param, fp, indent=4)
-        return "{}\nAgent saved to: {}".format(comment, path)
+        message = comment + "\nAgent saved to: " + path
+        if verbose:
+            return message
 
 
     def load(path):
