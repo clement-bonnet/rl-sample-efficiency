@@ -197,7 +197,7 @@ class DdpgAgent:
     def train(self, nb_episodes, max_steps, batch_size=32, summary_writer_path=None,
             set_device=None, lr_actor=0.0001, lr_critic=0.0001, tau=0.001,
             sigma_noise=None, save_after_episodes=None,
-            save_path="models/intermediate_models", episode_start=0):
+            save_path=None, episode_start=0, verbose=True):
         """
         Train the DDPG agent.
         Arguments:
@@ -238,6 +238,11 @@ class DdpgAgent:
         else:
             writer = None
         
+        if save_after_episodes is not None and save_path is None:
+            save_path = "models/intermediate_models_" + 
+                datetime.datetime.today().strftime("%Y_%m_%d_%H%M")
+        verbose_message = ""
+
         if sigma_noise is not None:
             self.noise.sigma = sigma_noise
         
@@ -303,7 +308,7 @@ class DdpgAgent:
             if save_after_episodes is not None and episode in save_after_episodes:
                 path = os.path.join(save_path, "episode_{}".format(episode))
                 comment = "Agent trained on {} episodes.".format(episode)
-                self.save(path, comment)
+                verbose_message += self.save(path, comment) + "\n"
             if step > best_nb_step:
                 best_nb_step = step
             if ep_reward > best_reward:
@@ -313,6 +318,8 @@ class DdpgAgent:
                 writer.add_scalar("Episode/steps", step, episode)
             t.set_postfix(best_reward=best_reward, best_nb_step=best_nb_step)
         writer.close()
+        if verbose:
+            print(comment)
 
     
     def test(self, nb_episodes=5, max_steps=200, sleep_time=1):
@@ -363,7 +370,7 @@ class DdpgAgent:
             agent_param["comment"] = comment
         with open(os.path.join(path, "agent_param.json"), "w") as fp:
             json.dump(agent_param, fp, indent=4)
-        print("Agent saved to: {}".format(path))
+        return "{}\nAgent saved to: {}".format(comment, path)
 
 
     def load(path):
