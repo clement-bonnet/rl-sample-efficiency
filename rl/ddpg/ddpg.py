@@ -335,7 +335,8 @@ class DdpgAgent:
                 writer.add_scalar("Episode/reward", ep_reward, episode)
                 writer.add_scalar("Episode/steps", step, episode)
             t.set_postfix(best_reward=best_reward, best_nb_step=best_nb_step)
-        writer.close()
+        if writer is not None:
+            writer.close()
         if verbose:
             print(verbose_message)
 
