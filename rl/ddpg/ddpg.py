@@ -97,7 +97,7 @@ class ReplayBuffer:
         self.buffer_r = np.empty(buffer_size)
         self.buffer_d = np.empty(buffer_size, dtype=np.bool)
         self.buffer_s2 = np.empty((buffer_size, state_dim))
-        self.index = 0
+        self.index = -1
 
     def add(self, s, a, reward, done, s2):
         self.index += 1
@@ -112,7 +112,7 @@ class ReplayBuffer:
         return self.buffer_size        
     
     def __len__(self):
-        return min(self.index, self.buffer_size)
+        return min(self.index+1, self.buffer_size)
     
     def sample(self, batch_size, device):
         indices = np.random.choice(len(self), batch_size)
@@ -129,7 +129,7 @@ class ReplayBuffer:
         self.buffer_r = 0
         self.buffer_d = False
         self.buffer_s2 = 0
-        self.index = 0
+        self.index = -1
     
     def __repr__(self):
         return "ReplayBuffer named {} with a buffer size of {}.".format(self.buffer_name, self.buffer_size)
