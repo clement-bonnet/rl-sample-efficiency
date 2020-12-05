@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(
     name="rl",
-    version="0.0.1",
+    version="0.0.2",
     author="Clément Bonnet",
     author_email="clement.bonnet16@gmail.com",
     description="""A package that gathers implementations of reinforcement
