@@ -135,40 +135,6 @@ class ReplayBuffer:
         return "ReplayBuffer named {} with a buffer size of {}.".format(self.buffer_name, self.buffer_size)
 
 
-class ReplayBufferOld:
-    def __init__(self, buffer_size, buffer_name=""):
-        self.buffer_size = buffer_size
-        self.buffer_name = buffer_name
-        self.buffer = deque()
-        self.exp_nb = 0
-
-    def add(self, s, a, reward, done, s2):
-        experience = (s, a, reward, done, s2)
-        if self.exp_nb < self.buffer_size:
-            self.exp_nb += 1
-        else:
-            self.buffer.popleft()
-        self.buffer.append(experience)
-        
-    def size(self):
-        return self.buffer_size        
-    
-    def __len__(self):
-        return len(self.buffer)
-    
-    def sample(self, batch_size):
-        batch = random.sample(self.buffer, self.exp_nb if self.exp_nb < batch_size else batch_size)
-        s, a, reward, done, s2 = map(np.stack, zip(*batch))
-        return s, a, reward, done, s2
-    
-    def clear(self):
-        self.buffer = deque()
-        self.exp_nb = 0
-    
-    def __repr__(self):
-        return "ReplayBuffer named {} with a buffer size of {}.".format(self.buffer_name, self.buffer_size)
-
-
 class DdpgAgent:
     """
     Deep Deterministic Policy Gradient agent.
