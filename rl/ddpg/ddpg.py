@@ -208,6 +208,14 @@ class DdpgAgent:
         else:
             self.target_critic = target_critic.to(self.device)
 
+        # Copy networks initial values to target networks
+        for target_param, param in zip(
+                self.target_critic.parameters(), self.critic.parameters()):
+            target_param.data.copy_(param.data)
+        for target_param, param in zip(
+                self.target_actor.parameters(), self.actor.parameters()):
+            target_param.data.copy_(param.data)
+
         self.noise = OrnsteinUhlenbeckActionNoise(
             mu=np.zeros(action_dim), sigma=0.1*self.a_bound)
         self.buffer = ReplayBuffer(buffer_size, state_dim, action_dim)
