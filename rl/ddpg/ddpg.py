@@ -12,12 +12,18 @@ import torch
 from torch import nn
 from tqdm import trange
 
+def fanin_(size):
+    fan_in = size[0]
+    weight = 1./np.sqrt(fan_in)
+    return torch.Tensor(size).uniform_(-weight, weight)
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, h1, h2, init_w=1e-1):
+    def __init__(self, state_dim, action_dim, h1, h2, init_w=1e-4):
         super(Critic, self).__init__()
         self.linear1 = nn.Linear(state_dim, h1)
+        self.linear1.weight.data = fanin_(self.linear1.weight.data.size())
         self.linear2 = nn.Linear(h1 + action_dim, h2)
+        self.linear2.weight.data = fanin_(self.linear2.weight.data.size())
         self.linear3 = nn.Linear(h2, 1)
         self.linear3.weight.data.uniform_(-init_w, init_w)
         self.relu = nn.ReLU()
@@ -31,11 +37,13 @@ class Critic(nn.Module):
         return x
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, a_bound, h1, h2, init_w=1e-1):
+    def __init__(self, state_dim, action_dim, a_bound, h1, h2, init_w=1e-4):
         super(Actor, self).__init__()
         self.a_bound = a_bound
         self.linear1 = nn.Linear(state_dim, h1)
+        self.linear1.weight.data = fanin_(self.linear1.weight.data.size())
         self.linear2 = nn.Linear(h1, h2)
+        self.linear2.weight.data = fanin_(self.linear2.weight.data.size())
         self.linear3 = nn.Linear(h2, action_dim)
         self.linear3.weight.data.uniform_(-init_w, init_w)
         self.relu = nn.ReLU()
@@ -349,7 +357,7 @@ class DdpgAgent:
             print(verbose_message)
 
     
-    def test(self, nb_episodes=5, max_steps=200, sleep_time=1):
+    def test(self, nb_episodes=5, max_steps=200, sleep_step=0, sleep_episode=1):
         """
         Test the agent on the environment with a given number of episodes.
         """
@@ -363,9 +371,10 @@ class DdpgAgent:
                 a = actor_loaded.get_action(s, device="cpu")
                 s2, reward, done, info = self.env.step(a)
                 self.env.render()
+                time.sleep(sleep_step)
                 if done: break
                 s = torch.from_numpy(s2)
-            time.sleep(sleep_time)
+            time.sleep(sleep_episode)
         self.env.close()
 
 
@@ -402,7 +411,7 @@ class DdpgAgent:
             return message
 
 
-    def load(path):
+    def load(path, device="cpu"):
         """
         Load an agent from a path that contains:
         - agent_param.json
@@ -430,19 +439,27 @@ class DdpgAgent:
         a_bound = min(abs(env.action_space.low[0]), abs(env.action_space.high[0]))
         
         actor = Actor(state_dim, action_dim, a_bound, h1, h2)
-        actor.load_state_dict(torch.load(os.path.join(path, "actor.pt")))
+        actor.load_state_dict(torch.load(
+            os.path.join(path, "actor.pt"),
+            map_location=torch.device(device)))
         actor.eval()
 
         critic = Critic(state_dim, action_dim, h1, h2)
-        critic.load_state_dict(torch.load(os.path.join(path, "critic.pt")))
+        critic.load_state_dict(torch.load(
+            os.path.join(path, "critic.pt"),
+            map_location=torch.device(device)))
         critic.eval()
 
         target_actor = Actor(state_dim, action_dim, a_bound, h1, h2)
-        target_actor.load_state_dict(torch.load(os.path.join(path, "target_actor.pt")))
+        target_actor.load_state_dict(torch.load(
+            os.path.join(path, "target_actor.pt"),
+            map_location=torch.device(device)))
         target_actor.eval()
 
         target_critic = Critic(state_dim, action_dim, h1, h2)
-        target_critic.load_state_dict(torch.load(os.path.join(path, "target_critic.pt")))
+        target_critic.load_state_dict(torch.load(
+            os.path.join(path, "target_critic.pt"),
+            map_location=torch.device(device)))
         target_critic.eval()
 
         agent = DdpgAgent(env_name, actor=actor, critic=critic,
