@@ -295,6 +295,7 @@ class DdpgAgent:
         for episode in t:
             s = torch.from_numpy(self.env.reset())
             ep_reward = 0
+            self.noise.reset()
             for step in range(1, max_steps+1):
                 a = self.actor.get_action(s, self.device)
                 a = np.clip(a + self.noise(), -self.a_bound, self.a_bound)
@@ -336,7 +337,6 @@ class DdpgAgent:
                 s = torch.from_numpy(s2)
                 ep_reward += reward        
                 if done:
-                    self.noise.reset()
                     break
             # The episode has just ended
             if save_episodes is not None and episode in save_episodes:
