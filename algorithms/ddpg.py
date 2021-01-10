@@ -278,7 +278,7 @@ class DdpgAgent:
             writer = None
         
         if save_episodes is not None and save_path is None:
-            save_path = "models/agent_" + \
+            save_path = "models\\agent_" + \
                 datetime.datetime.today().strftime("%Y_%m_%d_%H%M")
         verbose_message = ""
 
