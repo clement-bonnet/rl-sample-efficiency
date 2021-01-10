@@ -7,9 +7,9 @@ import random
 
 import gym
 import numpy as np
-from tensorboardX import SummaryWriter
 import torch
 from torch import nn
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import trange
 
 def fanin_(size):
