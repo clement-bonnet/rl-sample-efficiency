@@ -134,3 +134,4 @@ dmypy.json
 # experiments
 runs/
 models/
+gif/
