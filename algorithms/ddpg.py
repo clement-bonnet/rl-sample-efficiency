@@ -1,4 +1,4 @@
-from collections import deque
+import copy
 import datetime
 import os
 import json
@@ -16,6 +16,12 @@ def fanin_(size):
     fan_in = size[0]
     weight = 1./np.sqrt(fan_in)
     return torch.Tensor(size).uniform_(-weight, weight)
+
+def add_to_summary(writer, name, value, timestep):
+    try:
+        writer.add_scalar(name, value, timestep)
+    except Exception:
+        pass
 
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim, h1, h2, init_w=1e-4):
@@ -58,7 +64,7 @@ class Actor(nn.Module):
         x = self.a_bound*self.tanh(x)    # rescale output in [-a_bound, +a_bound]
         return x
     
-    def get_action(self, state, device):
+    def get_action(self, state, device="cpu"):
         state = torch.FloatTensor(state.float()).unsqueeze(0).to(device)
         action = self.forward(state)
         return action.detach().cpu().numpy()[0]
@@ -232,17 +238,16 @@ class DdpgAgent:
 
         self.gamma = gamma
 
-
-    def train(self, nb_episodes, max_steps, batch_size=32, summary_writer_path=None,
+    def train(self, nb_steps, max_steps_ep=None, batch_size=32, summary_writer_path=None,
             set_device=None, lr_actor=0.0001, lr_critic=0.0001, tau=0.001,
-            sigma_noise=None, save_episodes=None,
-            save_path=None, episode_start=0, verbose=True):
+            sigma_noise=None, save_steps=None, assess_every_nb_steps=None,
+            assess_nb_episodes=1, save_path=None, verbose=True):
         """
         Train the DDPG agent.
         Arguments:
-            - nb_episodes: int
-                Number of episodes to train the agent on.
-            - max_steps: int
+            - nb_steps: int
+                Number of environment steps to train the agent on.
+            - max_steps_ep: int
                 Maximum number of steps per episode.
             - batch_size: int
                 Batch size of experience sampled from buffer and trained on
@@ -256,17 +261,18 @@ class DdpgAgent:
             - lr_critic: float
                 Learning rate used in the critic network.
             - tau: float
-                Hyperparameter that determines the rate at which the networks' parameters
-                move towards the targets ones.
+                Hyperparameter that determines the rate at which the networks'
+                parameters move towards the targets ones.
             - sigma_noise: float
                 Set the noise added in the actions.
-            - save_episodes: list[int]
-                List of episodes after which to save current models.
+            - save_steps: List[int]
+                Save models at specific number of steps.
+            - assess_every_nb_steps: int
+                Assess the model every assess_every_nb_steps steps.
+            - assess_nb_episodes: int
+                Number of episodes to assess the model over.
             - save_path: str
                 Path where to save intermediate models.
-            - episode_start: int
-                In case of a warm start, episode_start is the number of episodes
-                the agent has already been trained on.
         """
         
         if set_device is not None:
@@ -277,8 +283,8 @@ class DdpgAgent:
         else:
             writer = None
         
-        if save_episodes is not None and save_path is None:
-            save_path = "models\\agent_" + \
+        if save_steps is not None and save_path is None:
+            save_path = "models/agent_" + \
                 datetime.datetime.today().strftime("%Y_%m_%d_%H%M")
         verbose_message = ""
 
@@ -290,90 +296,115 @@ class DdpgAgent:
         actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr_actor)
         critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=lr_critic)
         loss_fn = torch.nn.MSELoss()
-        writer_loss_count, best_nb_step, best_reward = 0, 0, -np.inf
-        t = trange(episode_start + 1, episode_start + nb_episodes + 1)
-        for episode in t:
-            s = torch.from_numpy(self.env.reset())
-            ep_reward = 0
-            self.noise.reset()
-            for step in range(1, max_steps+1):
-                a = self.actor.get_action(s, self.device)
-                a = np.clip(a + self.noise(), -self.a_bound, self.a_bound)
-                s2, reward, done, info = self.env.step(a)
-                self.buffer.add(s, a, reward, done, s2)
-                # Experience replay
-                if len(self.buffer) > self.buffer_start:
-                    s_b, a_b, reward_b, done_b, s2_b = self.buffer.sample(batch_size, self.device)
+        done, steps_in_episode = True, 0
+        t = trange(1, nb_steps + 1)
+        for step in t:
+            if done or max_steps_ep is not None and steps_in_episode >= max_steps_ep:
+                # Reset the episode
+                s = torch.from_numpy(self.env.reset())
+                self.noise.reset()
+                steps_in_episode = 0
+            
+            a = self.actor.get_action(s, self.device)
+            a = np.clip(a + self.noise(), -self.a_bound, self.a_bound)
+            s2, reward, done, info = self.env.step(a)
+            self.buffer.add(s, a, reward, done, s2)
+            steps_in_episode +=1
+            # Experience replay
+            if len(self.buffer) > self.buffer_start:
+                s_b, a_b, reward_b, done_b, s2_b = self.buffer.sample(batch_size, self.device)
 
-                    # Compute loss for critic
-                    a2_b = self.target_actor(s2_b)
-                    target_q = self.target_critic(s2_b, a2_b)
-                    y = reward_b + (1 - done_b) * self.gamma * target_q.detach()  # detach to avoid backprop target
-                    q = self.critic(s_b, a_b)
+                # Compute loss for critic
+                a2_b = self.target_actor(s2_b)
+                target_q = self.target_critic(s2_b, a2_b)
+                y = reward_b + (1 - done_b) * self.gamma * target_q.detach()  # detach to avoid backprop target
+                q = self.critic(s_b, a_b)
 
-                    critic_optimizer.zero_grad()
-                    critic_loss = loss_fn(q, y)
-                    critic_loss.backward()
-                    critic_optimizer.step()
+                critic_optimizer.zero_grad()
+                critic_loss = loss_fn(q, y)
+                critic_loss.backward()
+                critic_optimizer.step()
 
-                    # Compute loss for actor
-                    actor_optimizer.zero_grad()
-                    actor_loss = - self.critic(s_b, self.actor(s_b))
-                    actor_loss = actor_loss.mean()
-                    actor_loss.backward()
-                    actor_optimizer.step()
+                # Compute loss for actor
+                actor_optimizer.zero_grad()
+                actor_loss = - self.critic(s_b, self.actor(s_b))
+                actor_loss = actor_loss.mean()
+                actor_loss.backward()
+                actor_optimizer.step()
 
-                    if writer is not None:
-                        writer_loss_count += 1
-                        writer.add_scalar("Loss/actor", actor_loss.item(), writer_loss_count)
-                        writer.add_scalar("Loss/critic", critic_loss.item(), writer_loss_count)
+                if writer is not None:
+                    add_to_summary(writer, "Loss/actor", actor_loss.item(), step)
+                    add_to_summary(writer, "Loss/critic", critic_loss.item(), step)
+                
+                # Soft update of the networks towards the target networks
+                for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
+                    target_param.data.copy_(target_param.data*(1 - tau) + param.data*tau)
+                for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
+                    target_param.data.copy_(target_param.data*(1 - tau) + param.data*tau)
 
-                    # Soft update of the networks towards the target networks
-                    for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
-                        target_param.data.copy_(target_param.data*(1 - tau) + param.data*tau)
-                    for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
-                        target_param.data.copy_(target_param.data*(1 - tau) + param.data*tau)
+            s = torch.from_numpy(s2)
 
-                s = torch.from_numpy(s2)
-                ep_reward += reward        
-                if done:
-                    break
-            # The episode has just ended
-            if save_episodes is not None and episode in save_episodes:
-                path = os.path.join(save_path, "episode_{}".format(episode))
-                comment = "Agent trained on {} episodes.".format(episode)
+            if save_steps is not None and step in save_steps:
+                # Save the model
+                path = os.path.join(save_path, "step_{}".format(step))
+                comment = "Agent trained on {} steps.".format(step)
                 verbose_message += self.save(path, comment, verbose=True) + "\n"
-            if step > best_nb_step:
-                best_nb_step = step
-            if ep_reward > best_reward:
-                best_reward = ep_reward
-            if writer is not None:
-                writer.add_scalar("Episode/reward", ep_reward, episode)
-                writer.add_scalar("Episode/steps", step, episode)
-            t.set_postfix(best_reward=best_reward, best_nb_step=best_nb_step)
+            if step % assess_every_nb_steps == 0:
+                # Evaluate the model
+                return_, steps_per_ep = self.assess(assess_nb_episodes)
+                add_to_summary(writer, "Episode/reward", return_, step)
+                add_to_summary(writer, "Episode/steps", steps_per_ep, step)
+
         if writer is not None:
             writer.close()
         if verbose:
             print(verbose_message)
 
-    
-    def test(self, nb_episodes=5, max_steps=200, sleep_step=0, sleep_episode=1):
+    def assess(self, nb_episodes=1):
+        """
+        Evaluate the model and return the average return and number of steps.
+        """
+        return_ = 0
+        nb_steps = 0
+        env = gym.make(self.env_name)
+        actor = copy.deepcopy(self.actor).to("cpu")
+        for _ in range(nb_episodes):
+            s = torch.from_numpy(env.reset())
+            done = False
+            while not done:
+                a = actor.get_action(s)
+                s2, reward, done, _ = env.step(a)
+                return_ += reward
+                nb_steps += 1
+                s = torch.from_numpy(s2)
+        return_ = return_/nb_episodes
+        nb_steps = nb_steps/nb_episodes
+        return return_, nb_steps
+
+
+
+    def test_display(self, nb_episodes=5, max_steps=None, sleep_step=0, sleep_episode=1):
         """
         Test the agent on the environment with a given number of episodes.
         """
 
-        actor_loaded = self.actor.to("cpu")
+        actor_loaded = copy.deepcopy(self.actor).to("cpu")
         self.env.reset()
         self.env.render()
         for _ in range(nb_episodes):
+            done = False
             s = torch.from_numpy(self.env.reset())
-            for step in range(max_steps):
-                a = actor_loaded.get_action(s, device="cpu")
+            step = 1
+            while not done:
+                if max_steps is not None and step > max_steps:
+                    break
+                a = actor_loaded.get_action(s)
                 s2, reward, done, info = self.env.step(a)
                 self.env.render()
                 time.sleep(sleep_step)
                 if done: break
                 s = torch.from_numpy(s2)
+                step += 1
             time.sleep(sleep_episode)
         self.env.close()
 
@@ -411,7 +442,7 @@ class DdpgAgent:
             return message
 
 
-    def load(path, device="cpu"):
+    def load(path, device="cpu", verbose=True):
         """
         Load an agent from a path that contains:
         - agent_param.json
@@ -466,5 +497,6 @@ class DdpgAgent:
             target_actor=target_actor, target_critic=target_critic, h1=h1,
             h2=h2, buffer_size=buffer_size, buffer_start=buffer_start,
             gamma=gamma)
-        print("Agent loaded!", "Comment: {}".format(comment) if comment else "")
+        if verbose:
+            print("Agent loaded!", "Comment: {}".format(comment) if comment else "")
         return agent
