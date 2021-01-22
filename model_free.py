@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 
-from algorithms.ddpg import DdpgAgent
+from algorithms.model_free_ddpg import DdpgAgent
 from utils.utils import seed_python, seed_agent
 
 
@@ -29,6 +29,7 @@ def run(config_file):
     SAVE_PATH = config["SAVE_PATH"]
     RANDOM_SEED = config["RANDOM_SEED"]
     SAVE_STEPS = config["SAVE_STEPS"]
+    SIGMA_NOISE = config.get("SIGMA_NOISE", None)
 
     seed_python(RANDOM_SEED)
     agent = DdpgAgent(
@@ -38,7 +39,7 @@ def run(config_file):
     agent.train(
         NB_STEPS, MAX_STEPS_EP, BATCH_SIZE, summary_writer_path=SW_PATH,
         lr_actor=LR_ACTOR, lr_critic=LR_CRITIC, tau=TAU, save_steps=SAVE_STEPS,
-        assess_every_nb_steps=ASSESS_EVERY_NB_STEPS,
+        assess_every_nb_steps=ASSESS_EVERY_NB_STEPS, sigma_noise=SIGMA_NOISE,
         assess_nb_episodes=ASSESS_NB_EPISODES, save_path=SAVE_PATH, verbose=False)
 
 

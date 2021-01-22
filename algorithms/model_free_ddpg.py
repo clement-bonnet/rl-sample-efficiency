@@ -289,20 +289,21 @@ class DdpgAgent:
         verbose_message = ""
 
         if sigma_noise is not None:
-            self.noise.sigma = sigma_noise
+            self.noise.sigma = sigma_noise*self.a_bound
         
         for model in [self.actor, self.critic, self.target_actor, self.target_critic]:
             model = model.to(self.device)
         actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr_actor)
         critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=lr_critic)
         loss_fn = torch.nn.MSELoss()
-        done, steps_in_episode = True, 0
+        done, steps_in_episode, episode = True, 0, 0
         t = trange(1, nb_steps + 1)
         for step in t:
             if done or max_steps_ep is not None and steps_in_episode >= max_steps_ep:
                 # Reset the episode
                 s = torch.from_numpy(self.env.reset())
                 self.noise.reset()
+                episode += 1
                 steps_in_episode = 0
             
             a = self.actor.get_action(s, self.device)
@@ -354,6 +355,7 @@ class DdpgAgent:
                 return_, steps_per_ep = self.assess(assess_nb_episodes)
                 add_to_summary(writer, "Episode/reward", return_, step)
                 add_to_summary(writer, "Episode/steps", steps_per_ep, step)
+                add_to_summary(writer, "Episode/index", episode, step)
 
         if writer is not None:
             writer.close()
@@ -383,7 +385,8 @@ class DdpgAgent:
 
 
 
-    def test_display(self, nb_episodes=5, max_steps=None, sleep_step=0, sleep_episode=1):
+    def test_display(self, nb_episodes=5, max_steps=None, sleep_step=0,
+            sleep_episode=1, sleep_before_start=None):
         """
         Test the agent on the environment with a given number of episodes.
         """
@@ -391,6 +394,8 @@ class DdpgAgent:
         actor_loaded = copy.deepcopy(self.actor).to("cpu")
         self.env.reset()
         self.env.render()
+        if sleep_before_start is not None:
+            time.sleep(sleep_before_start)
         for _ in range(nb_episodes):
             done = False
             s = torch.from_numpy(self.env.reset())
@@ -430,7 +435,7 @@ class DdpgAgent:
             "h1": self.h1,
             "h2": self.h2,
             "buffer_size": self.buffer_size,
-            "buffer_start": self.buffer_start,
+            # "buffer_start": self.buffer_start,
             "gamma": self.gamma
         }
         if comment is not None:
@@ -460,7 +465,7 @@ class DdpgAgent:
         h1 = agent_param["h1"]
         h2 = agent_param["h2"]
         buffer_size = agent_param["buffer_size"]
-        buffer_start = agent_param["buffer_start"]
+        # buffer_start = agent_param["buffer_start"]
         gamma = agent_param["gamma"]
         comment = agent_param.get("comment", "")
 
@@ -495,7 +500,7 @@ class DdpgAgent:
 
         agent = DdpgAgent(env_name, actor=actor, critic=critic,
             target_actor=target_actor, target_critic=target_critic, h1=h1,
-            h2=h2, buffer_size=buffer_size, buffer_start=buffer_start,
+            h2=h2, buffer_size=buffer_size, buffer_start=0,
             gamma=gamma)
         if verbose:
             print("Agent loaded!", "Comment: {}".format(comment) if comment else "")
