@@ -21,8 +21,8 @@
     "STATE_NOISE": 0.0,
     "ASSESS_EVERY_NB_STEPS": 2000,
     "ASSESS_NB_EPISODES": 10,
-    "SW_PATH": "runs/mb/exp_17",
-    "SAVE_PATH": "models/mb/exp_17",
+    "SW_PATH": "runs/model_based_1",
+    "SAVE_PATH": "models/model_based_1",
     "RANDOM_SEED": 0,
     "SAVE_STEPS": [
         1000,
